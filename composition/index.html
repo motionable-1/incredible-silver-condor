@@ -1,23 +1,37 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hyperframes Composition</title>
+  <title>Revid AI - Promouvoir la création de vidéos virales</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
     :root {
       color-scheme: dark;
-      font-family: Inter, sans-serif;
+      font-family: 'Inter', sans-serif;
       background: transparent;
-      color: #f6f1e8;
+      color: #ffffff;
       font-kerning: normal;
       text-rendering: geometricPrecision;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
+
+      /* Brand Colors */
+      --color-bg: #0b0d11;
+      --color-primary: #020618;
+      --color-gray: #9ca3af;
+      --color-accent-purple: #8b5cf6;
+      --color-accent-green: #05df72;
+      --color-accent-blue: #3b82f6;
+      --color-glass-bg: rgba(16, 18, 22, 0.45);
+      --color-glass-border: rgba(255, 255, 255, 0.08);
     }
 
     * {
       box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
 
     html,
@@ -26,153 +40,1284 @@
       height: 100%;
       margin: 0;
       overflow: hidden;
-      background: #0b0b0d;
+      background: var(--color-bg);
     }
 
+    /* Video Frame Container */
     #stage {
       position: relative;
       width: 1920px;
       height: 1080px;
       overflow: hidden;
-      background:
-        linear-gradient(180deg, rgb(255 255 255 / 0.04), transparent 38%),
-        radial-gradient(ellipse at 50% 52%, rgb(255 255 255 / 0.07), transparent 48%),
-        #0b0b0d;
+      background: var(--color-bg);
     }
 
-    .preview-pending-scene {
+    /* Ambient Background - Shared across scenes */
+    #ambient-bg {
       position: absolute;
       inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      padding-left: 232px;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .bg-grid {
+      position: absolute;
+      inset: 0;
+      background-image: 
+        linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+      background-size: 80px 80px;
+      mask-image: radial-gradient(ellipse at 50% 50%, black 40%, transparent 85%);
+      opacity: 0.8;
+    }
+
+    /* Ambient Glowing Blobs */
+    .bg-blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(140px);
+      will-change: transform;
+    }
+
+    .blob-purple {
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.22) 0%, transparent 70%);
+      top: -100px;
+      right: 100px;
+    }
+
+    .blob-green {
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(5, 223, 114, 0.14) 0%, transparent 70%);
+      bottom: -100px;
+      left: 100px;
+    }
+
+    .blob-blue {
+      width: 450px;
+      height: 450px;
+      background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
+      top: 40%;
+      right: 25%;
+    }
+
+    /* Global Title Styles with Masks for slides */
+    .reveal-mask {
       overflow: hidden;
-      transform: translate3d(0, 0, 0);
-      backface-visibility: hidden;
+      display: block;
+      line-height: 1.15;
     }
 
-    .preview-pending-scene::before {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      content: "";
-      background:
-        linear-gradient(90deg, rgb(11 11 13 / 0.88) 0%, rgb(11 11 13 / 0.72) 28%, transparent 62%),
-        linear-gradient(90deg, rgb(255 255 255 / 0.03), transparent 34%),
-        linear-gradient(180deg, transparent 58%, rgb(0 0 0 / 0.34));
-    }
-
-    .preview-pending-grid {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      opacity: 0.28;
-      background-image:
-        linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px),
-        linear-gradient(180deg, rgb(255 255 255 / 0.035) 1px, transparent 1px);
-      background-size: 72px 72px;
-      mask-image: radial-gradient(ellipse at center, black 0%, transparent 72%);
-    }
-
-    .preview-pending-content {
-      position: relative;
-      z-index: 2;
-      width: 560px;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      text-shadow: 0 20px 54px rgb(0 0 0 / 0.56);
+    .reveal-text {
+      display: inline-block;
+      transform: translate3d(0, 110%, 0);
       will-change: transform, opacity;
     }
 
-    .preview-pending-status {
-      display: inline-flex;
+    /* Common Scene structure - Visibility lifecycle is managed by Hyperframes player */
+    .scene {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 10px;
-      color: rgb(246 241 232 / 0.64);
-      font-size: 15px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      line-height: 1;
+      justify-content: center;
+    }
+
+    /* Inner Wrapper to safely handle transition animations without modifying parent clip visibility */
+    .scene-content {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      will-change: transform, opacity;
+    }
+
+    /* GLASSMORPHISM CARD DESIGN */
+    .glass-card {
+      background: var(--color-glass-bg);
+      backdrop-filter: blur(25px);
+      -webkit-backdrop-filter: blur(25px);
+      border: 1px solid var(--color-glass-border);
+      border-radius: 20px;
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4);
+      padding: 24px;
+      will-change: transform, opacity;
+    }
+
+    /* ==============================================
+       SCENE 1: HOOK / INTRO
+       ============================================== */
+    #scene1-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0 160px;
+    }
+
+    .hook-title-container {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .hook-subtitle {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--color-accent-purple);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      margin-bottom: 16px;
+      text-shadow: 0 0 24px rgba(139, 92, 246, 0.45);
+    }
+
+    .hook-heading {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 96px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.0;
       text-transform: uppercase;
     }
 
-    .preview-pending-dot {
+    .hook-heading-gradient {
+      background: linear-gradient(135deg, #ffffff 40%, var(--color-accent-purple) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hook-heading-green {
+      background: linear-gradient(135deg, var(--color-accent-green) 0%, #34d399 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 40px rgba(5, 223, 114, 0.25);
+    }
+
+    /* Floating visual accents for S1 */
+    .s1-floating-card {
+      position: absolute;
+      width: 280px;
+      height: 130px;
+    }
+
+    #s1-card-left {
+      left: 180px;
+      top: 600px;
+      transform: rotate(-8deg);
+    }
+
+    #s1-card-right {
+      right: 180px;
+      top: 250px;
+      transform: rotate(8deg);
+    }
+
+    .floating-card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .floating-card-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(139, 92, 246, 0.15);
+    }
+
+    .floating-card-user {
+      font-size: 14px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    .floating-card-stat {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--color-accent-green);
+    }
+
+    /* ==============================================
+       SCENE 2: SCRIPT TO VIDEO MOCKUP
+       ============================================== */
+    #scene2-content {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 160px;
+    }
+
+    .s2-text-column {
+      width: 600px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      will-change: transform, opacity;
+    }
+
+    .s2-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(59, 130, 246, 0.12);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      padding: 8px 16px;
+      border-radius: 100px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-accent-blue);
+      margin-bottom: 24px;
+    }
+
+    .s2-badge-dot {
       width: 8px;
       height: 8px;
-      border-radius: 999px;
-      background: #d6a15c;
-      box-shadow: 0 0 24px rgb(214 161 92 / 0.7);
+      background: var(--color-accent-blue);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--color-accent-blue);
     }
 
-    .preview-pending-title {
-      max-width: 560px;
-      margin-top: 20px;
-      font-size: 54px;
-      font-weight: 760;
-      letter-spacing: 0;
-      line-height: 0.98;
+    .s2-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 64px;
+      font-weight: 700;
+      line-height: 1.1;
+      margin-bottom: 20px;
     }
 
-    .preview-pending-subtitle {
-      max-width: 430px;
-      margin-top: 14px;
-      color: rgb(246 241 232 / 0.58);
-      font-size: 20px;
-      font-weight: 500;
-      letter-spacing: 0;
-      line-height: 1.35;
+    .s2-subtitle {
+      font-size: 18px;
+      color: var(--color-gray);
+      line-height: 1.5;
+      margin-bottom: 30px;
     }
 
-    .preview-pending-progress {
-      width: 360px;
-      height: 2px;
-      margin-top: 32px;
+    .s2-mockup-column {
+      position: relative;
+      width: 850px;
+      height: 600px;
+      will-change: transform, opacity;
+    }
+
+    /* Left pane: Script Editor */
+    .mock-script-panel {
+      position: absolute;
+      left: 0;
+      top: 50px;
+      width: 440px;
+      height: 480px;
+      z-index: 12;
+    }
+
+    .mock-script-header {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--color-gray);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .mock-script-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .mock-script-bullets {
+      display: flex;
+      gap: 6px;
+    }
+
+    .mock-script-bullet {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .mock-script-line {
+      font-family: monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 12px;
+      color: rgba(255, 255, 255, 0.85);
+      opacity: 0;
+    }
+
+    .mock-script-line span {
+      color: var(--color-accent-purple);
+    }
+
+    .mock-script-cta {
+      position: absolute;
+      bottom: 24px;
+      left: 24px;
+      right: 24px;
+      background: linear-gradient(135deg, var(--color-accent-purple), #6366f1);
+      border-radius: 12px;
+      padding: 14px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      cursor: pointer;
+      box-shadow: 0 10px 25px rgba(139, 92, 246, 0.35);
+    }
+
+    /* Right pane: Video Player */
+    .mock-player-panel {
+      position: absolute;
+      right: 0;
+      top: 80px;
+      width: 440px;
+      height: 480px;
+      z-index: 11;
+      padding: 12px;
       overflow: hidden;
-      background: rgb(246 241 232 / 0.12);
+      border: 1px solid rgba(5, 223, 114, 0.2);
     }
 
-    .preview-pending-progress span {
-      display: block;
+    .mock-player-video {
+      position: relative;
       width: 100%;
       height: 100%;
-      transform-origin: left center;
-      background: linear-gradient(90deg, #9c7441, #f1d4a8);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #111;
+    }
+
+    .mock-player-video img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scale(1.15);
+    }
+
+    .mock-player-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.7));
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 20px;
+    }
+
+    .mock-player-badge {
+      align-self: flex-start;
+      background: var(--color-accent-green);
+      color: #020618;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 4px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      box-shadow: 0 0 15px var(--color-accent-green);
+    }
+
+    .mock-player-subtitle {
+      background: rgba(0, 0, 0, 0.7);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      line-height: 1.4;
+      border-left: 3px solid var(--color-accent-green);
+    }
+
+    /* Animated mouse cursor pointing */
+    .arrow-cursor {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      z-index: 150;
+      pointer-events: none;
+      transform: translate3d(500px, 450px, 0);
+      opacity: 0;
+    }
+
+    /* ==============================================
+       SCENE 3: VOICE & WAVEFORM
+       ============================================== */
+    #scene3-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0 160px;
+    }
+
+    .s3-title-container {
+      text-align: center;
+      margin-bottom: 60px;
+    }
+
+    .s3-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(139, 92, 246, 0.12);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      padding: 8px 16px;
+      border-radius: 100px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-accent-purple);
+      margin-bottom: 24px;
+    }
+
+    .s3-badge-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--color-accent-purple);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--color-accent-purple);
+    }
+
+    .s3-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 64px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .s3-subtitle {
+      font-size: 18px;
+      color: var(--color-gray);
+    }
+
+    /* Center Interface Row */
+    .s3-interface-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      max-width: 1400px;
+      gap: 60px;
+    }
+
+    /* Waveform column */
+    .s3-waveform-column {
+      width: 500px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 30px;
+      will-change: transform, opacity;
+    }
+
+    .waveform-visualizer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 180px;
+      width: 100%;
+    }
+
+    .waveform-bar {
+      width: 8px;
+      height: 100%;
+      border-radius: 100px;
+      background: linear-gradient(to top, var(--color-accent-purple), var(--color-accent-blue));
+      transform-origin: center;
+      transform: scaleY(0.08);
+      box-shadow: 0 0 15px rgba(139, 92, 246, 0.15);
+    }
+
+    /* Voice cards column */
+    .s3-cards-column {
+      width: 550px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .voice-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      border-radius: 16px;
+      transform: translate3d(50px, 0, 0);
+      opacity: 0;
+      transition: all 0.3s ease;
+    }
+
+    .voice-card.active {
+      background: rgba(139, 92, 246, 0.1);
+      border-color: rgba(139, 92, 246, 0.3);
+      box-shadow: 0 0 30px rgba(139, 92, 246, 0.15);
+    }
+
+    .voice-card-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .voice-card-flag {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      overflow: hidden;
+      border: 1.5px solid rgba(255, 255, 255, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #1e1e24;
+      font-size: 16px;
+    }
+
+    .voice-card-info-name {
+      font-size: 18px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 2px;
+    }
+
+    .voice-card-info-desc {
+      font-size: 13px;
+      color: var(--color-gray);
+    }
+
+    .voice-card-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .voice-card-play-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+
+    .voice-card.active .voice-card-play-btn {
+      background: var(--color-accent-purple);
+      color: #fff;
+      box-shadow: 0 0 15px rgba(139, 92, 246, 0.5);
+    }
+
+    .voice-card-tag {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--color-gray);
+    }
+
+    .voice-card.active .voice-card-tag {
+      background: rgba(139, 92, 246, 0.25);
+      color: #ffffff;
+    }
+
+    /* ==============================================
+       SCENE 4: CHANNELS & STATS
+       ============================================== */
+    #scene4-content {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 160px;
+    }
+
+    .s4-text-column {
+      width: 600px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      will-change: transform, opacity;
+    }
+
+    .s4-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(5, 223, 114, 0.12);
+      border: 1px solid rgba(5, 223, 114, 0.3);
+      padding: 8px 16px;
+      border-radius: 100px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-accent-green);
+      margin-bottom: 24px;
+    }
+
+    .s4-badge-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--color-accent-green);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--color-accent-green);
+    }
+
+    .s4-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 64px;
+      font-weight: 700;
+      line-height: 1.1;
+      margin-bottom: 20px;
+    }
+
+    .s4-subtitle {
+      font-size: 18px;
+      color: var(--color-gray);
+      line-height: 1.5;
+    }
+
+    .s4-mockup-column {
+      position: relative;
+      width: 800px;
+      height: 600px;
+      will-change: transform, opacity;
+    }
+
+    /* Circle Platform container in center of pane */
+    .platforms-orbit-wrap {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 500px;
+      height: 500px;
+    }
+
+    .platform-main-glow {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(5, 223, 114, 0.3) 0%, transparent 70%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .platform-main-circle {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: #020618;
+      border: 2px solid var(--color-accent-green);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 30px rgba(5, 223, 114, 0.4);
+    }
+
+    /* Platform nodes Orbiting */
+    .platform-node {
+      position: absolute;
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background: #0b0d11;
+      border: 1px solid var(--color-glass-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+      will-change: transform, opacity;
+    }
+
+    .platform-node img {
+      width: 48px;
+      height: 48px;
+    }
+
+    #node-tiktok {
+      top: 40px;
+      left: 200px;
+    }
+
+    #node-instagram {
+      bottom: 60px;
+      left: 40px;
+    }
+
+    #node-youtube {
+      bottom: 60px;
+      right: 40px;
+    }
+
+    /* Stats Cards floating in S4 */
+    .s4-stats-card {
+      position: absolute;
+      width: 280px;
+      z-index: 20;
+    }
+
+    #s4-card-metric1 {
+      left: -20px;
+      top: 100px;
+    }
+
+    #s4-card-metric2 {
+      right: -20px;
+      bottom: 120px;
+    }
+
+    .s4-metric-title {
+      font-size: 13px;
+      color: var(--color-gray);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .s4-metric-value {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 32px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 12px;
+    }
+
+    .sparkline-svg {
+      width: 100%;
+      height: 50px;
+    }
+
+    .sparkline-path {
+      fill: none;
+      stroke: var(--color-accent-green);
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-dasharray: 200;
+      stroke-dashoffset: 200;
+    }
+
+    /* ==============================================
+       SCENE 5: OUTRO / CALL TO ACTION
+       ============================================== */
+    #scene5-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      width: 100%;
+      height: 100%;
+    }
+
+    .outro-logo-wrap {
+      margin-bottom: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      will-change: transform, opacity;
+    }
+
+    .outro-logo {
+      height: 80px;
+      filter: drop-shadow(0 10px 30px rgba(139, 92, 246, 0.3));
+    }
+
+    .outro-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 72px;
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 16px;
+      letter-spacing: -0.02em;
+      will-change: transform, opacity;
+    }
+
+    .outro-title span {
+      background: linear-gradient(135deg, var(--color-accent-green) 0%, #20e3b2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 40px rgba(5, 223, 114, 0.25);
+    }
+
+    .outro-subtitle {
+      font-size: 22px;
+      color: var(--color-gray);
+      margin-bottom: 48px;
+      max-width: 600px;
+      line-height: 1.5;
+      will-change: transform, opacity;
+    }
+
+    .outro-cta-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background: linear-gradient(135deg, var(--color-accent-purple) 0%, #6366f1 100%);
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 20px 48px;
+      border-radius: 16px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: #ffffff;
+      text-decoration: none;
+      cursor: pointer;
+      box-shadow: 0 20px 40px rgba(139, 92, 246, 0.35);
+      will-change: transform, opacity;
+    }
+
+    .outro-cta-btn-icon {
+      width: 24px;
+      height: 24px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .outro-floating-element {
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1.5px dashed rgba(255, 255, 255, 0.08);
+      pointer-events: none;
+      will-change: transform, opacity;
+    }
+
+    #outro-ring-1 {
+      width: 400px;
+      height: 400px;
+    }
+
+    #outro-ring-2 {
+      width: 800px;
+      height: 800px;
     }
   </style>
 </head>
 <body>
+  <!-- Main Composition Frame (No other children before stage div to allow correct metadata parsing) -->
   <div
     id="stage"
     data-composition-id="Main"
     data-start="0"
-    data-duration="11.667"
+    data-duration="24.5"
     data-width="1920"
     data-height="1080"
     data-motionabl-fps="30"
-    data-motionabl-scenes='[{"label":"Preview","from":0,"durationInFrames":350}]'
+    data-motionabl-scenes='[
+      {"label":"Hook","from":0,"durationInFrames":120},
+      {"label":"Script à Vidéo","from":120,"durationInFrames":170},
+      {"label":"Voix & Simplicité","from":290,"durationInFrames":160},
+      {"label":"Multi-plateforme","from":450,"durationInFrames":140},
+      {"label":"Outro / CTA","from":590,"durationInFrames":145}
+    ]'
   >
+    <!-- Seekable Audio Assets (Nested safely as stage children) -->
+    <audio 
+      src="https://pub-e3bfc0083b0644b296a7080b21024c5f.r2.dev/music/1780348137902_mm1a3532nx_music_Upbeat_modern_electr.mp3" 
+      class="clip" 
+      data-start="0" 
+      data-duration="24.5" 
+      id="bg-music"
+      aria-hidden="true"
+    ></audio>
+    <audio 
+      src="https://pub-e3bfc0083b0644b296a7080b21024c5f.r2.dev/audio/1780348113505_9yjqdkyhg2s_1a3lMdKL_Donnez_vie___vos_id_.mp3" 
+      class="clip" 
+      data-start="0" 
+      data-duration="23.72" 
+      id="voiceover"
+      aria-hidden="true"
+    ></audio>
+    <audio 
+      src="https://pub-e3bfc0083b0644b296a7080b21024c5f.r2.dev/sfx/1780348142574_fatcvi9avrp_sfx_sleek_futuristic_digital_whoos.mp3" 
+      class="clip" 
+      data-start="3.7" 
+      data-duration="1.5" 
+      id="sfx-transition-1"
+      aria-hidden="true"
+    ></audio>
+    <audio 
+      src="https://pub-e3bfc0083b0644b296a7080b21024c5f.r2.dev/sfx/1780348142574_fatcvi9avrp_sfx_sleek_futuristic_digital_whoos.mp3" 
+      class="clip" 
+      data-start="9.3" 
+      data-duration="1.5" 
+      id="sfx-transition-2"
+      aria-hidden="true"
+    ></audio>
+    <audio 
+      src="https://pub-e3bfc0083b0644b296a7080b21024c5f.r2.dev/sfx/1780348142574_fatcvi9avrp_sfx_sleek_futuristic_digital_whoos.mp3" 
+      class="clip" 
+      data-start="14.6" 
+      data-duration="1.5" 
+      id="sfx-transition-3"
+      aria-hidden="true"
+    ></audio>
+    <audio 
+      src="https://pub-e3bfc0083b0644b296a7080b21024c5f.r2.dev/sfx/1780348142574_fatcvi9avrp_sfx_sleek_futuristic_digital_whoos.mp3" 
+      class="clip" 
+      data-start="19.3" 
+      data-duration="1.5" 
+      id="sfx-transition-4"
+      aria-hidden="true"
+    ></audio>
+
+    <!-- Background Elements (Persistent across all scenes) -->
+    <div id="ambient-bg">
+      <div class="bg-grid"></div>
+      <div class="bg-blob blob-purple"></div>
+      <div class="bg-blob blob-green"></div>
+      <div class="bg-blob blob-blue"></div>
+    </div>
+
+    <!-- ==============================================
+         SCENE 1: HOOK / INTRO (data-start 0s, duration 4s)
+         ============================================== -->
     <div
-      id="preview-pending"
-      class="clip preview-pending-scene"
+      id="scene1"
+      class="clip scene"
       data-start="0"
-      data-duration="11.667"
-      data-track-index="0"
+      data-duration="4.0"
+      data-track-index="1"
     >
-      <div class="preview-pending-grid" aria-hidden="true"></div>
-      <div class="preview-pending-content">
-        <div class="preview-pending-status">
-          <span class="preview-pending-dot"></span>
-          <span>Preview</span>
+      <div class="scene-content" id="scene1-content">
+        <div class="hook-title-container">
+          <div class="hook-subtitle">Le Pouvoir de la Vidéo IA</div>
+          <h1 class="hook-heading">
+            <span class="reveal-mask"><span class="reveal-text">Vos idées</span></span>
+            <span class="reveal-mask"><span class="reveal-text hook-heading-gradient">méritent d'être</span></span>
+            <span class="reveal-mask"><span class="reveal-text hook-heading-green">Vues.</span></span>
+          </h1>
         </div>
-        <div class="preview-pending-title">Preparing preview</div>
-        <div class="preview-pending-subtitle">
-          Generated scenes will appear here when ready.
+
+        <!-- Floating Glass Cards S1 -->
+        <div class="glass-card s1-floating-card" id="s1-card-left">
+          <div class="floating-card-header">
+            <div class="floating-card-icon">
+              <img src="https://api.iconify.design/ri/magic-line.svg?color=%238b5cf6&width=18" alt="" />
+            </div>
+            <span class="floating-card-user">Faceless Creator</span>
+          </div>
+          <div class="floating-card-stat">+600% d'Audience</div>
         </div>
-        <div class="preview-pending-progress" aria-hidden="true">
-          <span></span>
+
+        <div class="glass-card s1-floating-card" id="s1-card-right">
+          <div class="floating-card-header">
+            <div class="floating-card-icon">
+              <img src="https://api.iconify.design/ri/video-add-line.svg?color=%2305df72&width=18" alt="" />
+            </div>
+            <span class="floating-card-user">Revid Automation</span>
+          </div>
+          <div class="floating-card-stat">En 1 Click</div>
         </div>
+      </div>
+    </div>
+
+    <!-- ==============================================
+         SCENE 2: TEXT TO VIDEO (data-start 4s, duration 5.667s)
+         ============================================== -->
+    <div
+      id="scene2"
+      class="clip scene"
+      data-start="4.0"
+      data-duration="5.667"
+      data-track-index="2"
+    >
+      <div class="scene-content" id="scene2-content">
+        <div class="s2-text-column">
+          <div class="s2-badge">
+            <span class="s2-badge-dot"></span>
+            <span>Script-to-Video</span>
+          </div>
+          <h2 class="s2-title">
+            <span class="reveal-mask"><span class="reveal-text">Transformez</span></span>
+            <span class="reveal-mask"><span class="reveal-text hook-heading-gradient">votre texte</span></span>
+            <span class="reveal-mask"><span class="reveal-text">en vidéo.</span></span>
+          </h2>
+          <p class="s2-subtitle">Insérez votre idée. Notre IA écrit le script, choisit les médias et monte votre vidéo instantanément.</p>
+        </div>
+
+        <div class="s2-mockup-column">
+          <!-- Mouse cursor pointer -->
+          <div class="arrow-cursor">
+            <img src="https://api.iconify.design/ph/cursor-fill.svg?color=%23ffffff&width=24" alt="" />
+          </div>
+
+          <!-- Left Pane: Editor Mockup -->
+          <div class="glass-card mock-script-panel">
+            <div class="mock-script-header">
+              <div class="mock-script-title">
+                <img src="https://api.iconify.design/ri/file-list-3-line.svg?color=%238b5cf6&width=16" alt="" />
+                <span>Script Générateur</span>
+              </div>
+              <div class="mock-script-bullets">
+                <span class="mock-script-bullet"></span>
+                <span class="mock-script-bullet"></span>
+                <span class="mock-script-bullet"></span>
+              </div>
+            </div>
+            <div class="mock-script-line" id="line-1"><span>SCENE 1</span> - L'Italie Médiévale.</div>
+            <div class="mock-script-line" id="line-2">Matteo de Modène s'avance sur les remparts.</div>
+            <div class="mock-script-line" id="line-3">"Vous pensez que les guerres commencent..."</div>
+            <div class="mock-script-line" id="line-4">"pour de l'or... ou du territoire ?"</div>
+            <div class="mock-script-line" id="line-5">"Mais cette guerre a commencé..."</div>
+            <div class="mock-script-line" id="line-6">"à cause d'un simple seau."</div>
+            <div class="mock-script-cta" id="generate-btn">
+              <img src="https://api.iconify.design/ri/sparkling-fill.svg?color=%23ffffff&width=18" alt="" />
+              <span>Générer la vidéo</span>
+            </div>
+          </div>
+
+          <!-- Right Pane: Player Mockup -->
+          <div class="glass-card mock-player-panel">
+            <div class="mock-player-video">
+              <img src="https://pub-e3bfc0083b0644b296a7080b21024c5f.r2.dev/uploads/1780348156972_sa77rvb0je_t5NBxD8qaXLf0xKVa2JFv_E45hVWrX.png" alt="Matteo of Modena Medieval Soldier" />
+              <div class="mock-player-overlay">
+                <span class="mock-player-badge">100% Généré</span>
+                <div class="mock-player-subtitle">Matteo de Modène: "Mais cette guerre a commencé à cause d'un simple seau."</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==============================================
+         SCENE 3: VOICES & SIMPLICITY (data-start 9.667s, duration 5.333s)
+         ============================================== -->
+    <div
+      id="scene3"
+      class="clip scene"
+      data-start="9.667"
+      data-duration="5.333"
+      data-track-index="3"
+    >
+      <div class="scene-content" id="scene3-content">
+        <div class="s3-title-container">
+          <div class="s3-badge">
+            <span class="s3-badge-dot"></span>
+            <span>Ultra Réalisme</span>
+          </div>
+          <h2 class="s3-title">
+            <span class="reveal-mask"><span class="reveal-text">50+ Voix ultra-réalistes</span></span>
+          </h2>
+          <p class="s3-subtitle">Trouvez la voix idéale, masculine ou féminine, pour captiver votre audience.</p>
+        </div>
+
+        <div class="s3-interface-row">
+          <!-- Animated Waveform -->
+          <div class="s3-waveform-column">
+            <div class="waveform-visualizer">
+              <!-- 15 dynamic waveform bars -->
+              <span class="waveform-bar" style="height: 100%;"></span>
+              <span class="waveform-bar" style="height: 100%;"></span>
+              <span class="waveform-bar" style="height: 100%;"></span>
+              <span class="waveform-bar" style="height: 100%;"></span>
+              <span class="waveform-bar" style="height: 100%;"></span>
+              <span class="waveform-bar" style="height: 100%;"></span>
+              <span class="waveform-bar" style="height: 100%;"></span>
+              <span class="waveform-bar" style="height: 100%;"></span>
+              <span class="waveform-bar" style="height: 100%;"></span>
+              <span class="waveform-bar" style="height: 100%;"></span>
+              <span class="waveform-bar" style="height: 100%;"></span>
+              <span class="waveform-bar" style="height: 100%;"></span>
+              <span class="waveform-bar" style="height: 100%;"></span>
+              <span class="waveform-bar" style="height: 100%;"></span>
+              <span class="waveform-bar" style="height: 100%;"></span>
+            </div>
+            <div class="voice-card-tag" style="background: rgba(139, 92, 246, 0.15); color: #fff; font-size: 14px; padding: 6px 16px; border-radius: 100px;">Voix : Antoine (Narrateur)</div>
+          </div>
+
+          <!-- Voice Select Cards -->
+          <div class="s3-cards-column">
+            <!-- Voice Card 1: Active -->
+            <div class="voice-card active" id="voice-1">
+              <div class="voice-card-left">
+                <div class="voice-card-flag">🇫🇷</div>
+                <div class="voice-card-info">
+                  <div class="voice-card-info-name">Antoine</div>
+                  <div class="voice-card-info-desc">Narrateur dynamique & engagé</div>
+                </div>
+              </div>
+              <div class="voice-card-right">
+                <span class="voice-card-tag">Sélectionné</span>
+                <div class="voice-card-play-btn">
+                  <img src="https://api.iconify.design/ri/volume-up-fill.svg?color=%23ffffff&width=16" alt="" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Voice Card 2 -->
+            <div class="voice-card" id="voice-2">
+              <div class="voice-card-left">
+                <div class="voice-card-flag">🇫🇷</div>
+                <div class="voice-card-info">
+                  <div class="voice-card-info-name">Adina</div>
+                  <div class="voice-card-info-desc">Douce, claire & professionnelle</div>
+                </div>
+              </div>
+              <div class="voice-card-right">
+                <span class="voice-card-tag">Premium</span>
+                <div class="voice-card-play-btn">
+                  <img src="https://api.iconify.design/ri/play-fill.svg?color=%23ffffff&width=16" alt="" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Voice Card 3 -->
+            <div class="voice-card" id="voice-3">
+              <div class="voice-card-left">
+                <div class="voice-card-flag">🇺🇸</div>
+                <div class="voice-card-info">
+                  <div class="voice-card-info-name">Thomas</div>
+                  <div class="voice-card-info-desc">Voix d'annonceur américaine</div>
+                </div>
+              </div>
+              <div class="voice-card-right">
+                <span class="voice-card-tag">Premium</span>
+                <div class="voice-card-play-btn">
+                  <img src="https://api.iconify.design/ri/play-fill.svg?color=%23ffffff&width=16" alt="" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==============================================
+         SCENE 4: PUBLISH & SOCIALS (data-start 15s, duration 4.667s)
+         ============================================== -->
+    <div
+      id="scene4"
+      class="clip scene"
+      data-start="15.0"
+      data-duration="4.667"
+      data-track-index="4"
+    >
+      <div class="scene-content" id="scene4-content">
+        <div class="s4-text-column">
+          <div class="s4-badge">
+            <span class="s4-badge-dot"></span>
+            <span>Omniprésent</span>
+          </div>
+          <h2 class="s4-title">
+            <span class="reveal-mask"><span class="reveal-text">Publiez en</span></span>
+            <span class="reveal-mask"><span class="reveal-text hook-heading-green">un seul clic.</span></span>
+          </h2>
+          <p class="s4-subtitle">Exportez vos vidéos optimisées pour TikTok, Instagram Reels, et YouTube Shorts d'un coup.</p>
+        </div>
+
+        <div class="s4-mockup-column">
+          <!-- Orbit Platform wrap -->
+          <div class="platforms-orbit-wrap">
+            <div class="platform-main-glow">
+              <div class="platform-main-circle">
+                <img src="https://api.iconify.design/ri/send-plane-fill.svg?color=%2305df72&width=36" alt="" />
+              </div>
+            </div>
+
+            <!-- TikTok -->
+            <div class="platform-node" id="node-tiktok">
+              <img src="https://api.iconify.design/logos/tiktok-icon.svg?width=48" alt="TikTok" />
+            </div>
+
+            <!-- Instagram -->
+            <div class="platform-node" id="node-instagram">
+              <img src="https://api.iconify.design/logos/instagram-icon.svg?width=48" alt="Instagram" />
+            </div>
+
+            <!-- YouTube -->
+            <div class="platform-node" id="node-youtube">
+              <img src="https://api.iconify.design/logos/youtube-icon.svg?width=48" alt="YouTube" />
+            </div>
+          </div>
+
+          <!-- Floating stats metrics -->
+          <div class="glass-card s4-stats-card" id="s4-card-metric1">
+            <div class="s4-metric-title">Taux d'Engagement</div>
+            <div class="s4-metric-value">+600% d'Impact</div>
+            <svg class="sparkline-svg">
+              <path class="sparkline-path" id="spark1" d="M10,40 Q50,15 90,35 T170,10 T250,5" />
+            </svg>
+          </div>
+
+          <div class="glass-card s4-stats-card" id="s4-card-metric2">
+            <div class="s4-metric-title">Vues Mensuelles</div>
+            <div class="s4-metric-value">240K+ Vidéos</div>
+            <svg class="sparkline-svg">
+              <path class="sparkline-path" id="spark2" d="M10,45 Q60,35 110,40 T210,15 T260,8" style="stroke: var(--color-accent-purple);" />
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==============================================
+         SCENE 5: OUTRO / CALL TO ACTION (data-start 19.667s, duration 4.833s)
+         ============================================== -->
+    <div
+      id="scene5"
+      class="clip scene"
+      data-start="19.667"
+      data-duration="4.833"
+      data-track-index="5"
+    >
+      <div class="scene-content" id="scene5-content">
+        <!-- Background spinning rings -->
+        <div class="outro-floating-element" id="outro-ring-1"></div>
+        <div class="outro-floating-element" id="outro-ring-2"></div>
+
+        <div class="outro-logo-wrap">
+          <img class="outro-logo" src="https://pub-e3bfc0083b0644b296a7080b21024c5f.r2.dev/uploads/1780348147943_v0vm9tyy8jm_file.png" alt="revid.ai Logo" />
+        </div>
+
+        <h2 class="outro-title">
+          Idée. Publie. <span>Deviens viral.</span>
+        </h2>
+
+        <p class="outro-subtitle">
+          Rejoignez plus de 14 000 créateurs de contenu qui propulsent leur visibilité chaque jour avec notre intelligence artificielle.
+        </p>
+
+        <a href="https://www.revid.ai/" class="outro-cta-btn" target="_blank">
+          <span>Essayer gratuitement</span>
+          <div class="outro-cta-btn-icon">
+            <img src="https://api.iconify.design/ph/arrow-right-bold.svg?color=%23ffffff&width=16" alt="" />
+          </div>
+        </a>
       </div>
     </div>
   </div>
@@ -181,43 +1326,506 @@
   <script>
     window.__timelines = window.__timelines || {};
 
-    const timeline = gsap.timeline({ paused: true });
-    timeline.from(".preview-pending-content", {
-      opacity: 0,
-      y: 34,
-      scale: 0.98,
-      duration: 0.8,
-      ease: "power4.out",
-    }, 0);
-    timeline.from(".preview-pending-grid", {
-      opacity: 0,
-      scale: 1.08,
-      duration: 1.1,
-      ease: "power3.out",
-    }, 0);
-    timeline.to(".preview-pending-dot", {
-      opacity: 0.35,
-      duration: 0.9,
-      yoyo: true,
-      repeat: 10,
-      ease: "sine.inOut",
-    }, 0.25);
-    timeline.fromTo(".preview-pending-progress span", {
-      scaleX: 0.08,
+    const tl = gsap.timeline({ paused: true });
+
+    // Set audio volume correctly on load
+    const bgMusic = document.getElementById('bg-music');
+    if (bgMusic) {
+      bgMusic.volume = 0.18;
+    }
+
+    // ==============================================
+    // SCENE 1 ANIMATIONS (0.0s - 4.0s)
+    // ==============================================
+    
+    // Reveal main texts
+    tl.fromTo("#scene1 .reveal-text", {
+      yPercent: 110,
+      rotate: 2
     }, {
-      scaleX: 0.82,
-      duration: 5.8,
+      yPercent: 0,
+      rotate: 0,
+      duration: 1.0,
+      stagger: 0.18,
+      ease: "power4.out"
+    }, 0.2);
+
+    tl.fromTo("#scene1 .hook-subtitle", {
+      opacity: 0,
+      y: -20
+    }, {
+      opacity: 1,
+      y: 0,
+      duration: 0.8,
+      ease: "power3.out"
+    }, 0.1);
+
+    // Slide S1 cards
+    tl.fromTo("#s1-card-left", {
+      opacity: 0,
+      x: -100,
+      rotate: -15
+    }, {
+      opacity: 1,
+      x: 0,
+      rotate: -8,
+      duration: 1.2,
+      ease: "back.out(1.5)"
+    }, 0.6);
+
+    tl.fromTo("#s1-card-right", {
+      opacity: 0,
+      x: 100,
+      rotate: 15
+    }, {
+      opacity: 1,
+      x: 0,
+      rotate: 8,
+      duration: 1.2,
+      ease: "back.out(1.5)"
+    }, 0.8);
+
+    // Subtle drift animation S1 cards (deterministic float)
+    tl.to("#s1-card-left", {
+      y: "+=12",
+      duration: 2.0,
       yoyo: true,
       repeat: 1,
-      ease: "power2.inOut",
-    }, 0.4);
-    timeline.to(".preview-pending-grid", {
-      opacity: 0.28,
-      duration: 0.001,
-      ease: "power1.out",
-    }, 11.667);
+      ease: "sine.inOut"
+    }, 0.8);
 
-    window.__timelines.Main = timeline;
+    tl.to("#s1-card-right", {
+      y: "-=12",
+      duration: 2.0,
+      yoyo: true,
+      repeat: 1,
+      ease: "sine.inOut"
+    }, 1.0);
+
+    // Out transition S1 (3.5s - 4.0s)
+    tl.to("#scene1-content", {
+      opacity: 0,
+      y: -100,
+      filter: "blur(12px)",
+      duration: 0.5,
+      ease: "power2.in"
+    }, 3.5);
+
+
+    // ==============================================
+    // SCENE 2 ANIMATIONS (4.0s - 9.667s)
+    // ==============================================
+
+    // Title reveal
+    tl.fromTo("#scene2 .reveal-text", {
+      yPercent: 110,
+      rotate: 2
+    }, {
+      yPercent: 0,
+      rotate: 0,
+      duration: 0.8,
+      stagger: 0.15,
+      ease: "power4.out"
+    }, 4.2);
+
+    tl.fromTo("#scene2 .s2-badge", {
+      opacity: 0,
+      y: -15
+    }, {
+      opacity: 1,
+      y: 0,
+      duration: 0.6,
+      ease: "power3.out"
+    }, 4.1);
+
+    tl.fromTo("#scene2 .s2-subtitle", {
+      opacity: 0,
+      y: 15
+    }, {
+      opacity: 1,
+      y: 0,
+      duration: 0.6,
+      ease: "power3.out"
+    }, 4.5);
+
+    // Panel reveals
+    tl.fromTo(".mock-script-panel", {
+      opacity: 0,
+      x: -120,
+      rotateY: 25
+    }, {
+      opacity: 1,
+      x: 0,
+      rotateY: 0,
+      duration: 1.0,
+      ease: "power3.out"
+    }, 4.4);
+
+    tl.fromTo(".mock-player-panel", {
+      opacity: 0,
+      x: 120,
+      rotateY: -25
+    }, {
+      opacity: 1,
+      x: 0,
+      rotateY: 0,
+      duration: 1.0,
+      ease: "power3.out"
+    }, 4.6);
+
+    // Typewriter reveal of lines in script editor
+    const lines = [1, 2, 3, 4, 5, 6];
+    lines.forEach((num, index) => {
+      tl.to(`#line-${num}`, {
+        opacity: 1,
+        y: 0,
+        duration: 0.35,
+        ease: "power1.out"
+      }, 4.8 + (index * 0.15));
+    });
+
+    // Pointer cursor moves & clicks the Generate Button
+    tl.fromTo(".arrow-cursor", {
+      opacity: 0,
+      x: 480,
+      y: 420
+    }, {
+      opacity: 1,
+      x: 140,
+      y: 350,
+      duration: 0.9,
+      ease: "power2.inOut"
+    }, 5.2);
+
+    // Press down click effect on the button
+    tl.to("#generate-btn", {
+      scale: 0.94,
+      duration: 0.1,
+      yoyo: true,
+      repeat: 1,
+      ease: "sine.inOut"
+    }, 6.1);
+
+    // Cursor slides away & fades
+    tl.to(".arrow-cursor", {
+      x: 200,
+      y: 450,
+      opacity: 0,
+      duration: 0.4,
+      ease: "power2.in"
+    }, 6.2);
+
+    // Player action bloom (button click effect)
+    tl.fromTo(".mock-player-video img", {
+      scale: 1.15,
+      filter: "brightness(1.0)"
+    }, {
+      scale: 1.02,
+      filter: "brightness(1.5)",
+      duration: 0.3,
+      ease: "power1.out"
+    }, 6.2);
+
+    tl.to(".mock-player-video img", {
+      filter: "brightness(1.0)",
+      duration: 0.8,
+      ease: "power2.out"
+    }, 6.5);
+
+    // Camera drift zoom in on Mateo video mockup
+    tl.to(".mock-player-video img", {
+      scale: 1.08,
+      duration: 2.2,
+      ease: "sine.out"
+    }, 6.5);
+
+    // S2 Exits (9.167s - 9.667s)
+    tl.to("#scene2-content", {
+      opacity: 0,
+      y: 100,
+      filter: "blur(12px)",
+      duration: 0.5,
+      ease: "power2.in"
+    }, 9.167);
+
+
+    // ==============================================
+    // SCENE 3 ANIMATIONS (9.667s - 15.0s)
+    // ==============================================
+
+    // Title reveal S3
+    tl.fromTo("#scene3 .reveal-text", {
+      yPercent: 110,
+      rotate: 2
+    }, {
+      yPercent: 0,
+      rotate: 0,
+      duration: 0.8,
+      ease: "power4.out"
+    }, 9.8);
+
+    tl.fromTo("#scene3 .s3-badge", {
+      opacity: 0,
+      y: -15
+    }, {
+      opacity: 1,
+      y: 0,
+      duration: 0.6,
+      ease: "power3.out"
+    }, 9.7);
+
+    tl.fromTo("#scene3 .s3-subtitle", {
+      opacity: 0,
+      y: 15
+    }, {
+      opacity: 1,
+      y: 0,
+      duration: 0.6,
+      ease: "power3.out"
+    }, 10.0);
+
+    // Voice card reveals - Staggered cascade
+    tl.fromTo("#voice-1", { opacity: 0, x: 80 }, { opacity: 1, x: 0, duration: 0.8, ease: "back.out(1.3)" }, 10.2);
+    tl.fromTo("#voice-2", { opacity: 0, x: 80 }, { opacity: 1, x: 0, duration: 0.8, ease: "back.out(1.3)" }, 10.4);
+    tl.fromTo("#voice-3", { opacity: 0, x: 80 }, { opacity: 1, x: 0, duration: 0.8, ease: "back.out(1.3)" }, 10.6);
+
+    // Waveform container reveal
+    tl.fromTo(".s3-waveform-column", {
+      opacity: 0,
+      scale: 0.9,
+      y: 40
+    }, {
+      opacity: 1,
+      scale: 1,
+      y: 0,
+      duration: 0.9,
+      ease: "power3.out"
+    }, 10.3);
+
+    // Waveform bars rise up & pulse elastically
+    const bars = gsap.utils.toArray(".waveform-bar");
+    tl.fromTo(bars, {
+      scaleY: 0.08
+    }, {
+      scaleY: 1.0,
+      duration: 0.6,
+      stagger: {
+        each: 0.04,
+        from: "center",
+        grid: "auto"
+      },
+      ease: "elastic.out(1, 0.4)"
+    }, 10.5);
+
+    // Simulated talking soundwave pulse (0.05s steps)
+    bars.forEach((bar, i) => {
+      // Create random pulses that look like an active premium visualizer
+      const delayOffset = i * 0.03;
+      tl.to(bar, {
+        scaleY: 0.2 + Math.sin(i * 0.8) * 0.45,
+        duration: 0.25,
+        repeat: 14,
+        yoyo: true,
+        ease: "sine.inOut"
+      }, 11.1 + delayOffset);
+    });
+
+    // Pulse active voice card "Sélectionné" badge
+    tl.fromTo(".voice-card.active .voice-card-play-btn", {
+      scale: 1
+    }, {
+      scale: 1.15,
+      duration: 0.6,
+      repeat: 5,
+      yoyo: true,
+      ease: "sine.inOut"
+    }, 11.0);
+
+    // Out transition S3 (14.5s - 15.0s)
+    tl.to("#scene3-content", {
+      opacity: 0,
+      y: -100,
+      filter: "blur(12px)",
+      duration: 0.5,
+      ease: "power2.in"
+    }, 14.5);
+
+
+    // ==============================================
+    // SCENE 4 ANIMATIONS (15.0s - 19.667s)
+    // ==============================================
+
+    // Title reveal S4
+    tl.fromTo("#scene4 .reveal-text", {
+      yPercent: 110,
+      rotate: 2
+    }, {
+      yPercent: 0,
+      rotate: 0,
+      duration: 0.8,
+      stagger: 0.15,
+      ease: "power4.out"
+    }, 15.1);
+
+    tl.fromTo("#scene4 .s4-badge", {
+      opacity: 0,
+      y: -15
+    }, {
+      opacity: 1,
+      y: 0,
+      duration: 0.6,
+      ease: "power3.out"
+    }, 15.0);
+
+    tl.fromTo("#scene4 .s4-subtitle", {
+      opacity: 0,
+      y: 15
+    }, {
+      opacity: 1,
+      y: 0,
+      duration: 0.6,
+      ease: "power3.out"
+    }, 15.3);
+
+    // Platform orbit circles entry - pop in elastically
+    tl.fromTo(".platform-main-circle", {
+      scale: 0,
+      opacity: 0
+    }, {
+      scale: 1,
+      opacity: 1,
+      duration: 1.0,
+      ease: "elastic.out(1, 0.4)"
+    }, 15.3);
+
+    tl.fromTo("#node-tiktok", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.8, ease: "elastic.out(1, 0.5)" }, 15.5);
+    tl.fromTo("#node-instagram", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.8, ease: "elastic.out(1, 0.5)" }, 15.7);
+    tl.fromTo("#node-youtube", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.8, ease: "elastic.out(1, 0.5)" }, 15.9);
+
+    // Orbit drift rotate slowly (deterministic 3.5 seconds)
+    tl.to(".platforms-orbit-wrap", {
+      rotation: 12,
+      duration: 3.5,
+      ease: "power1.inOut"
+    }, 15.5);
+
+    // Stats Card Entries
+    tl.fromTo("#s4-card-metric1", {
+      opacity: 0,
+      x: -50,
+      y: 50
+    }, {
+      opacity: 1,
+      x: 0,
+      y: 0,
+      duration: 0.9,
+      ease: "back.out(1.3)"
+    }, 15.7);
+
+    tl.fromTo("#s4-card-metric2", {
+      opacity: 0,
+      x: 50,
+      y: -50
+    }, {
+      opacity: 1,
+      x: 0,
+      y: 0,
+      duration: 0.9,
+      ease: "back.out(1.3)"
+    }, 16.0);
+
+    // Stats Sparkline drawing
+    tl.to("#spark1", {
+      strokeDashoffset: 0,
+      duration: 1.6,
+      ease: "power2.inOut"
+    }, 16.3);
+
+    tl.to("#spark2", {
+      strokeDashoffset: 0,
+      duration: 1.6,
+      ease: "power2.inOut"
+    }, 16.6);
+
+    // Out transition S4 (19.167s - 19.667s)
+    tl.to("#scene4-content", {
+      opacity: 0,
+      scale: 0.9,
+      filter: "blur(12px)",
+      duration: 0.5,
+      ease: "power2.in"
+    }, 19.167);
+
+
+    // ==============================================
+    // SCENE 5 ANIMATIONS (19.667s - 24.5s)
+    // ==============================================
+
+    // Logo pop in elastically
+    tl.fromTo(".outro-logo-wrap", {
+      scale: 0.2,
+      opacity: 0,
+      rotation: -15
+    }, {
+      scale: 1,
+      opacity: 1,
+      rotation: 0,
+      duration: 1.2,
+      ease: "elastic.out(1, 0.4)"
+    }, 19.8);
+
+    // Title reveal
+    tl.fromTo("#scene5 .outro-title", {
+      opacity: 0,
+      y: 40
+    }, {
+      opacity: 1,
+      y: 0,
+      duration: 0.8,
+      ease: "power3.out"
+    }, 20.3);
+
+    tl.fromTo("#scene5 .outro-subtitle", {
+      opacity: 0,
+      y: 30
+    }, {
+      opacity: 1,
+      y: 0,
+      duration: 0.8,
+      ease: "power3.out"
+    }, 20.6);
+
+    // CTA Button
+    tl.fromTo(".outro-cta-btn", {
+      scale: 0.7,
+      opacity: 0,
+      y: 40
+    }, {
+      scale: 1,
+      opacity: 1,
+      y: 0,
+      duration: 0.9,
+      ease: "back.out(1.5)"
+    }, 20.9);
+
+    // Glowing rings rotation S5 (deterministic hold)
+    tl.fromTo("#outro-ring-1", { rotation: 0, scale: 0.8, opacity: 0 }, { rotation: 180, scale: 1.0, opacity: 1, duration: 4.5, ease: "power1.out" }, 19.667);
+    tl.fromTo("#outro-ring-2", { rotation: 0, scale: 0.8, opacity: 0 }, { rotation: -90, scale: 1.0, opacity: 1, duration: 4.5, ease: "power1.out" }, 19.667);
+
+    // Slowly pulse the CTA button's glow/scale slightly to draw click action
+    tl.to(".outro-cta-btn", {
+      scale: 1.03,
+      duration: 0.8,
+      yoyo: true,
+      repeat: 3,
+      ease: "sine.inOut"
+    }, 21.8);
+
+
+    // ==============================================
+    // REGISTER TIMELINE IN HYPERFRAMES
+    // ==============================================
+    window.__timelines.Main = tl;
   </script>
 </body>
 </html>
